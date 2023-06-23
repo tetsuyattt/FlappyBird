@@ -49,14 +49,16 @@ class GameScene: SKScene,SKPhysicsContactDelegate {
     let effectSoundData = NSDataAsset(name: "powerup02")!.data
     func playEffectSound(){
 //        do{
-            musicPlayer = try? AVAudioPlayer(data: effectSoundData)
-            musicPlayer.volume = 0.1
+//            musicPlayer = try? AVAudioPlayer(data: effectSoundData)
+//            musicPlayer.volume = 0.1//didMove()内に移動
             musicPlayer.play()
 //        }catch{
 //            print("再生に失敗しました")
 //        }
     }
     //ここまで追加(課題)効果音追加　→４８２行目へ
+    
+
 
     
     //--------------ここから追加９　画面をタップした時に鳥を動かす　→追加１３にて編集
@@ -94,11 +96,11 @@ class GameScene: SKScene,SKPhysicsContactDelegate {
         
         //追加７　壁用のノード　上のと同じ
         wallNode = SKNode()
-        addChild(wallNode)
+        scrollNode.addChild(wallNode)
         
         //追加（課題６？）最初これがなかった→「Thread 1: Fatal error: Unexpectedly found nil while implicitly unwrapping an Optional value」nilが検出されたとエラーがあった　→これ入れたら起動できた
         heartNode = SKNode()
-        addChild(heartNode)
+        scrollNode.addChild(heartNode)
         
         //↓↓追加６　各スプライトを生成する処理をメソッドに分割した方が後々編集するときにどこに何があるかわかりやすいからおすすめ
         setupGround()
@@ -110,6 +112,12 @@ class GameScene: SKScene,SKPhysicsContactDelegate {
         
         //追加（課題１）　次はfunc setupHeart()作る　ランダムに出現させたいからまずはsetupWall()を参考にしてみる→１９８行目へ
         setupHeart()
+        
+        //提出後のメンタリング時アドバイス【最初のハート取得時に画面がカクカクするのを防ぐ】
+        musicPlayer = try? AVAudioPlayer(data: effectSoundData)
+        musicPlayer.volume = 0.1
+        musicPlayer.prepareToPlay()
+        
     }
     
     
@@ -348,6 +356,9 @@ class GameScene: SKScene,SKPhysicsContactDelegate {
         
         let moveHeartDistance = self.frame.size.width + heartTexture.size().width
         let moveHeart = SKAction.moveBy(x: -moveHeartDistance, y: 0, duration: TimeInterval(random_time)) //wallは４
+//        let moveHeart = SKAction.moveBy(x: -moveHeartDistance, y: 0, duration: 4)
+        
+        
         let removeHeart = SKAction.removeFromParent()
         let heartAnimation = SKAction.sequence([moveHeart, removeHeart])
 
@@ -386,6 +397,7 @@ class GameScene: SKScene,SKPhysicsContactDelegate {
             hearts.run(heartAnimation)
 
             self.heartNode.addChild(hearts)
+
         })
 
         //追加(課題２)次のheart作成までの時間待ちアクションを作成  →setupWall()の最後と一緒　無限にハートを作ってくれいってこと
@@ -475,20 +487,23 @@ class GameScene: SKScene,SKPhysicsContactDelegate {
             print("itemScoreUp")
             score += 1
             scoreLabelNode.text = "Score:\(score)"
-
+            
             itemScore += 1
             itemScoreLabelNode.text = "ItemScore:\(itemScore)"
             
             //ハートを除去する的なコードを書く
-            heartNode.removeFromParent()
+            heartNode.removeFromParent()  //→後に出てくるハート全部消えちゃう
+            //----------------↓追加（指摘後）←こっちにしたらハートを取得した後もハートが作られるようになった
+            //でも、取得後に出てくるハートの位置や速度が、一番最初に出てくるものと同じものにリセットされる気がする
+            //            heartNode.removeAllChildren()
+
+            heartNode = SKNode()
+            scrollNode.addChild(heartNode) //追加(課題)指摘後追加するも、接触時＋１０とかなってしまう
+            setupHeart()
+            //ここまでハートを除去する的なコード　→もっと簡単な方法ある
             
             //ここで音を出したい"powerup02"　→import AVFoundation
             playEffectSound()
-           
-            heartNode = SKNode()
-            addChild(heartNode)
-            setupHeart()
-            
             
             var bestScore = userDefaults.integer(forKey: "BEST")
             if score > bestScore {
@@ -496,6 +511,15 @@ class GameScene: SKScene,SKPhysicsContactDelegate {
                 bestScoreLabelNode.text = "Best Score:\(bestScore)"
                 userDefaults.set(bestScore, forKey: "BEST")
             }
+            
+//            //【もっと簡単な方法】------------------武智さんはこんな感じにやってた
+//        } else if (contact.bodyA.categoryBitMask & heartScoreCategory) == heartScoreCategory {
+//            contact.bodyA.node?.removeFromParent()
+//        }(contact.bodyB.categoryBitMask & heartScoreCategory) == heartScoreCategory {
+//            contact.bodyB.node?.removeFromParent()
+//            //【もっと簡単な方法】------------------武智さんはこんな感じにやってた
+//            //うろ覚えだったし、ハートが消えなかったからまた今度聞かないと…
+            
            //---------------ここまで追加(課題６？)
            
             
@@ -503,6 +527,8 @@ class GameScene: SKScene,SKPhysicsContactDelegate {
             //壁か地面と衝突した時、（多分、それ以外の場所と衝突した時ってこと）
             print("GameOver")
             scrollNode.speed = 0 //スクロールを停止する
+            
+            
             //衝突後は地面と反発するのみとする（リスタートするまで反発させない）←いるのこれ？
             bird.physicsBody?.collisionBitMask = groundCategory
             //なんで400.0？　　鳥が衝突した時の高さをもとに、鳥が地面に落ちる目での秒数（概算）＋１を計算
@@ -511,7 +537,7 @@ class GameScene: SKScene,SKPhysicsContactDelegate {
             let roll = SKAction.rotate(byAngle: 2.0 * Double.pi * duration, duration: duration)
             
 //            //追加(課題)ゲームオーバーの時ハートを除去する
-//            heartNode.removeAllChildren()　→この位置だと衝突した瞬間にハートが消えるから違和感ある　→restart()に移動
+//            heartNode.removeAllChildren()　→この位置だと衝突した瞬間にハートが消えるから違和感あった　→restart()に移動
             
             //ノードによって実行されるアクション(bird)のリストにアクション(roll)を追加して、引数ブロック（回転止める）をアクション（roll）の完了時に実行するように予定するってこと
             bird.run(roll, completion: {
@@ -521,7 +547,7 @@ class GameScene: SKScene,SKPhysicsContactDelegate {
         }
     }
     //ここまで追加１１　衝突した時に起こることの設定
-    
+  
     
     //ここから追加１２　画面をタップしたらリスタート。restart()メソッド実装
     //こういう状態でリスタートするよってことだな
@@ -545,9 +571,14 @@ class GameScene: SKScene,SKPhysicsContactDelegate {
         //鳥とスクロールの動きを再開させる
         bird.speed = 1
         scrollNode.speed = 1
+      
         
-        //追加(課題)ゲームオーバーの時ハートもリセットする
+        //追加(課題)ゲームオーバーの時ハートもリセットする→大事
         heartNode.removeAllChildren()
+        
+//        scrollNode!.addChild(heartNode) //追加(課題)指摘後追加するも→既に親Nodeにあるよって言われる
+        
+         
     }
     //ここまで追加１２　画面をタップしたらこの条件でリスタート
     
